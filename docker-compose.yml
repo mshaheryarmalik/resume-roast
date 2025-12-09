@@ -1,0 +1,114 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15.4-alpine
+    container_name: resume-roast-db
+    env_file:
+      - .env.docker
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U resume_roast_user -d resume_roast"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - resume-roast-network
+
+  # LocalStack for AWS services simulation
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: resume-roast-localstack
+    env_file:
+      - .env.docker
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - resume-roast-network
+
+  # Backend API Service
+  backend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: resume-roast-backend
+    env_file:
+      - .env.docker
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_started
+    volumes:
+      - ./server:/app
+    command: ["sh", "-c", "alembic upgrade head && python main.py"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - resume-roast-network
+
+  # Frontend UI Service
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: resume-roast-frontend
+    env_file:
+      - .env.docker
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./frontend:/app
+    command: ["python", "app.py"]
+    networks:
+      - resume-roast-network
+
+  # Setup service for initializing LocalStack resources
+  setup:
+    image: amazon/aws-cli:2.15.0
+    container_name: resume-roast-setup
+    env_file:
+      - .env.docker
+    depends_on:
+      - localstack
+    volumes:
+      - ./scripts:/scripts
+    command: >
+      sh -c "
+        echo 'Waiting for LocalStack to be ready...' &&
+        sleep 10 &&
+        echo 'Creating S3 bucket...' &&
+        aws --endpoint-url=http://localstack:4566 s3 mb s3://resume-roast-pdfs-local &&
+        echo 'Setting up bucket lifecycle...' &&
+        aws --endpoint-url=http://localstack:4566 s3api put-bucket-lifecycle-configuration \
+          --bucket resume-roast-pdfs-local \
+          --lifecycle-configuration file:///scripts/s3-lifecycle.json &&
+        echo 'Creating KMS key...' &&
+        aws --endpoint-url=http://localstack:4566 kms create-key \
+          --description 'Resume Roast local test key' &&
+        echo 'LocalStack setup complete!'
+      "
+    networks:
+      - resume-roast-network
+
+volumes:
+  postgres_data:
+  localstack_data:
+
+networks:
+  resume-roast-network:
+    driver: bridge
