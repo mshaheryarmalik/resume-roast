@@ -1,0 +1,14 @@
+{
+  "Rules": [
+    {
+      "ID": "DeleteOldPDFs",
+      "Status": "Enabled",
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1
+      }
+    }
+  ]
+}
