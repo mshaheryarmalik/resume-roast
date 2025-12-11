@@ -29,9 +29,13 @@ logger = logging.getLogger(__name__)
 # Global scheduler instance
 scheduler = AsyncIOScheduler()
 
+# Global agent memory for all analyses
+AGENT_MEMORY: list[str] = []
+
 
 async def refresh_agent_memory() -> None:
     """Background task to refresh agent memory with aggregated learnings."""
+    global AGENT_MEMORY
     try:
         async with get_db_session() as session:
             feedback_repo = FeedbackRepository(session)
@@ -39,14 +43,17 @@ async def refresh_agent_memory() -> None:
             # Get recent learnings
             learnings = await feedback_repo.get_aggregated_learnings(limit=50)
             
-            # Log memory refresh (in production, you'd update agent prompts here)
+            # Extract descriptions and store in global memory
+            AGENT_MEMORY = [learning.description for learning in learnings]
+            
             logger.info(
                 "Memory refresh completed: Found %d learning patterns", 
-                len(learnings)
+                len(AGENT_MEMORY)
             )
             
-            # In a full implementation, you'd update the agent system prompts
-            # with the most frequent and high-confidence patterns
+            # Log top patterns for visibility
+            for i, pattern in enumerate(AGENT_MEMORY[:5], 1):
+                logger.debug("  Pattern %d: %s", i, pattern)
             
     except Exception as e:
         logger.error("Error during memory refresh: %s", str(e))
