@@ -176,7 +176,7 @@ class FeedbackRepository:
         """
         stmt = select(AgentResponse).where(
             AgentResponse.session_id == session_id,
-            AgentResponse.agent_name == agent_name
+            AgentResponse.agent_name == agent_name.lower()
         )
         result = await self.db_session.execute(stmt)
         return result.scalar_one_or_none()

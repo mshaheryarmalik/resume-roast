@@ -31,6 +31,11 @@ class ResumeRoastUI:
         self.upload_area = None
         self.job_description_input = None
         
+        # Feedback dialog state
+        self.feedback_dialog = None
+        self.feedback_input = None
+        self.pending_feedback = {'agent_name': None, 'thumbs_up': None}
+        
     def setup_theme(self) -> None:
         """Configure corporate blue theme."""
         ui.colors(
@@ -44,6 +49,55 @@ class ResumeRoastUI:
         )
         
         ui.dark_mode(False)  # Light mode
+    
+    def create_feedback_dialog(self) -> None:
+        """Create feedback dialog at page level."""
+        with ui.dialog() as dialog:
+            with ui.card().classes('w-96 p-6'):
+                dialog_title = ui.label('Feedback').classes('text-lg font-bold mb-4')
+                self.feedback_input = ui.textarea('Enter optional feedback...').classes('w-full h-24 mb-4')
+                
+                with ui.row().classes('justify-end gap-2'):
+                    async def on_skip():
+                        await self._send_feedback_to_backend('')
+                        dialog.close()
+                    
+                    async def on_submit():
+                        await self._send_feedback_to_backend(self.feedback_input.value)
+                        dialog.close()
+                    
+                    ui.button('Skip', on_click=on_skip)
+                    ui.button('Submit', on_click=on_submit).classes('bg-blue-500 text-white')
+                
+                self.feedback_dialog = dialog
+                self._dialog_title = dialog_title
+    
+    async def _send_feedback_to_backend(self, feedback_text: str):
+        """Send feedback to backend."""
+        if not self.pending_feedback['agent_name'] or self.current_session_id is None:
+            ui.notify('⚠️ No feedback session', type='warning')
+            return
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                feedback_data = {
+                    'session_id': str(self.current_session_id),
+                    'agent_name': self.pending_feedback['agent_name'].capitalize(),
+                    'thumbs_up': self.pending_feedback['thumbs_up'],
+                    'feedback_text': feedback_text
+                }
+                
+                response = await client.post(
+                    f'{self.api_base_url}/submit-feedback',
+                    json=feedback_data
+                )
+                
+                if response.status_code == 200:
+                    ui.notify('✅ Feedback submitted!', type='positive')
+                else:
+                    ui.notify(f'❌ Error: {response.status_code}', type='negative')
+        except Exception as e:
+            ui.notify(f'❌ Error: {str(e)}', type='negative')
     
     def create_header(self) -> None:
         """Create application header."""
@@ -225,18 +279,14 @@ class ResumeRoastUI:
                     ui.label('Was this helpful?').classes('text-sm text-gray-600')
                     
                     thumbs_up_btn = ui.button(
-                        '👍', 
-                        on_click=lambda: asyncio.create_task(
-                            self.submit_feedback(agent_name, True)
-                        )
-                    ).classes('text-sm')
+                        '👍',
+                        on_click=lambda arg=None, a=agent_name: self._on_feedback_click(a, True)
+                    ).classes('text-sm hover:bg-green-100')
                     
                     thumbs_down_btn = ui.button(
                         '👎',
-                        on_click=lambda: asyncio.create_task(
-                            self.submit_feedback(agent_name, False)
-                        )
-                    ).classes('text-sm')
+                        on_click=lambda arg=None, a=agent_name: self._on_feedback_click(a, False)
+                    ).classes('text-sm hover:bg-red-100')
                     
                     # Store buttons for potential updates
                     self.feedback_buttons[agent_name] = {
@@ -244,9 +294,14 @@ class ResumeRoastUI:
                         'down': thumbs_down_btn
                     }
         
-        except Exception:
-            # Silently ignore feedback button errors
-            pass
+        except Exception as e:
+            logger.error(f"Error adding feedback buttons: {e}")
+    
+    def _on_feedback_click(self, agent_name: str, thumbs_up: bool):
+        """Handle feedback button click - synchronous wrapper."""
+        ui.timer(interval=0.01, callback=lambda: asyncio.ensure_future(
+            self.submit_feedback(agent_name, thumbs_up)
+        ), once=True)
     
     async def submit_feedback(self, agent_name: str, thumbs_up: bool):
         """Submit feedback for an agent response."""
@@ -255,77 +310,26 @@ class ResumeRoastUI:
             if agent_name in self.feedback_buttons:
                 buttons = self.feedback_buttons[agent_name]
                 if thumbs_up:
-                    buttons['up'].classes(remove='bg-gray-200 hover:bg-green-500').classes('bg-green-500 text-white')
-                    buttons['down'].props('disabled')
+                    buttons['up'].classes(remove='bg-gray-200 hover:bg-green-100').classes('bg-green-500 text-white')
+                    buttons['down'].set_enabled(False)
                 else:
-                    buttons['down'].classes(remove='bg-gray-200 hover:bg-red-500').classes('bg-red-500 text-white')
-                    buttons['up'].props('disabled')
+                    buttons['down'].classes(remove='bg-gray-200 hover:bg-red-100').classes('bg-red-500 text-white')
+                    buttons['up'].set_enabled(False)
             
-            feedback_text = None
+            # Store feedback info and show dialog
+            self.pending_feedback['agent_name'] = agent_name
+            self.pending_feedback['thumbs_up'] = thumbs_up
             
-            # Show feedback dialog for additional comments
-            if not thumbs_up:
-                with ui.dialog() as dialog, ui.card().classes('w-96 p-4'):
-                    ui.label(f'Help us improve {agent_name}\'s responses').classes('text-lg font-bold mb-4')
-                    feedback_input = ui.textarea(
-                        'What could be better?', 
-                        placeholder='Optional feedback...'
-                    ).classes('w-full')
-                    
-                    feedback_result = {'text': None}
-                    
-                    with ui.row().classes('justify-end gap-2 mt-4'):
-                        ui.button('Skip', on_click=dialog.close).classes('text-sm')
-                        ui.button(
-                            'Submit',
-                            on_click=lambda: (
-                                setattr(feedback_result, 'text', feedback_input.value),
-                                dialog.close()
-                            )[-1]
-                        ).classes('text-sm bg-primary')
-                
-                dialog.open()
-                await dialog
-                
-                feedback_text = getattr(feedback_result, 'text', None)
+            # Update dialog title
+            title_text = 'Thank you for the feedback!' if thumbs_up else 'Help us improve'
+            self._dialog_title.text = title_text
             
-            # Send feedback to backend API
-            if self.current_session_id:
-                try:
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        feedback_data = {
-                            'session_id': self.current_session_id,
-                            'agent_name': agent_name.lower(),
-                            'thumbs_up': thumbs_up,
-                            'feedback_text': feedback_text or ''
-                        }
-                        
-                        response = await client.post(
-                            f'{self.api_base_url}/submit-feedback',
-                            json=feedback_data
-                        )
-                        
-                        if response.status_code == 200:
-                            # Feedback submitted successfully - button state already updated above
-                            pass
-                        else:
-                            # Feedback recorded locally - button state already updated above
-                            pass
-                except httpx.RequestError:
-                    # Network error - button state already updated above
-                    pass
-            else:
-                # No session ID - button state already updated above
-                pass
+            # Clear previous input and show dialog
+            self.feedback_input.value = ''
+            self.feedback_dialog.open()
             
         except Exception as ex:
-            # Reset button state on error
-            if agent_name in self.feedback_buttons:
-                buttons = self.feedback_buttons[agent_name]
-                buttons['up'].classes(remove='bg-green-500 bg-red-500 text-white').classes('bg-gray-200 hover:bg-green-500')
-                buttons['down'].classes(remove='bg-green-500 bg-red-500 text-white').classes('bg-gray-200 hover:bg-red-500')
-                buttons['up'].props(remove='disabled')
-                buttons['down'].props(remove='disabled')
+            ui.notify(f'❌ Error: {str(ex)}', type='negative')
     
     def create_main_interface(self):
         """Create the main chat interface."""
@@ -371,6 +375,9 @@ class ResumeRoastUI:
     def run_app(self):
         """Run the NiceGUI application."""
         self.setup_theme()
+        
+        # Create feedback dialog at page level
+        self.create_feedback_dialog()
         
         # Create UI
         self.create_header()
