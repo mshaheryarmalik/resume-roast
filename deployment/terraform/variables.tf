@@ -22,10 +22,26 @@ variable "db_instance_class" {
   default     = "db.t3.micro"
 }
 
-variable "openai_api_key" {
-  description = "OpenAI API key for LLM services"
+variable "azure_openai_api_key" {
+  description = "Azure OpenAI API key for LLM services"
   type        = string
   sensitive   = true
+}
+
+variable "azure_openai_endpoint" {
+  description = "Azure OpenAI endpoint URL"
+  type        = string
+}
+
+variable "azure_openai_api_version" {
+  description = "Azure OpenAI API version"
+  type        = string
+  default     = "2024-02-15-preview"
+}
+
+variable "azure_openai_deployment" {
+  description = "Azure OpenAI deployment name"
+  type        = string
 }
 
 # ECS Configuration

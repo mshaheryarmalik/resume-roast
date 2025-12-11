@@ -1,0 +1,52 @@
+name: Docker Build and Push
+
+on:
+  push:
+    branches:
+      - main
+      - development
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Ensure Backend ECR Repository Exists
+        run: |
+          aws ecr describe-repositories --repository-names resume-roast-backend || \
+          aws ecr create-repository --repository-name resume-roast-backend
+
+      - name: Build and Push Backend Image
+        run: |
+          BACKEND_ECR=$(aws ecr describe-repositories --repository-names resume-roast-backend --query 'repositories[0].repositoryUri' --output text)
+          docker build -f server/Dockerfile -t backend .
+          docker tag backend:latest $BACKEND_ECR:latest
+          docker push $BACKEND_ECR:latest
+
+      - name: Ensure Frontend ECR Repository Exists
+        run: |
+          aws ecr describe-repositories --repository-names resume-roast-frontend || \
+          aws ecr create-repository --repository-name resume-roast-frontend
+
+      - name: Build and Push Frontend Image
+        run: |
+          FRONTEND_ECR=$(aws ecr describe-repositories --repository-names resume-roast-frontend --query 'repositories[0].repositoryUri' --output text)
+          docker build -f frontend/Dockerfile -t frontend .
+          docker tag frontend:latest $FRONTEND_ECR:latest
+          docker push $FRONTEND_ECR:latest
+
+      - name: Force New Deployment on ECS
+        run: |
+          aws ecs update-service --cluster resume-roast-cluster --service resume-roast-backend --force-new-deployment
+          aws ecs update-service --cluster resume-roast-cluster --service resume-roast-frontend --force-new-deployment

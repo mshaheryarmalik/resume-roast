@@ -38,11 +38,11 @@ if [ ! -f "docker-compose.yml" ]; then
     exit 1
 fi
 
-# Get OpenAI API key if not provided
-if [ -z "$OPENAI_API_KEY" ]; then
-    echo -e "${YELLOW}Please enter your OpenAI API key:${NC}"
-    read -s OPENAI_API_KEY
-    export OPENAI_API_KEY
+# Get Azure OpenAI API key if not provided
+if [ -z "$AZURE_OPENAI_API_KEY" ]; then
+    echo -e "${YELLOW}Please enter your Azure OpenAI API key:${NC}"
+    read -s AZURE_OPENAI_API_KEY
+    export AZURE_OPENAI_API_KEY
 fi
 
 echo -e "${GREEN}✅ Prerequisites check passed${NC}"
@@ -52,12 +52,12 @@ echo -e "${YELLOW}Deploying infrastructure with Terraform...${NC}"
 cd deployment/terraform
 
 terraform init
-terraform plan -var="openai_api_key=$OPENAI_API_KEY"
+terraform plan -var="azure_openai_api_key=$AZURE_OPENAI_API_KEY"
 
 echo -e "${YELLOW}Apply infrastructure changes? (y/N)${NC}"
 read -r CONFIRM
 if [[ $CONFIRM =~ ^[Yy]$ ]]; then
-    terraform apply -var="openai_api_key=$OPENAI_API_KEY" -auto-approve
+    terraform apply -var="azure_openai_api_key=$AZURE_OPENAI_API_KEY" -auto-approve
 else
     echo -e "${RED}❌ Deployment cancelled${NC}"
     exit 1
