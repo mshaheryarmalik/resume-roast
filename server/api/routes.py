@@ -265,28 +265,35 @@ async def submit_feedback(
         if not updated_response:
             raise HTTPException(status_code=404, detail="Failed to update agent response")
         
-        # Process feedback for learning
+        # Always process feedback for learning - convert like/dislike to pattern
+        pattern_type = "positive_feedback" if feedback_request.thumbs_up else "negative_feedback"
+        confidence_score = 0.8 if feedback_request.thumbs_up else 0.3
+        
+        # Use feedback text as description if provided, otherwise use default message
         if feedback_request.feedback_text:
-            pattern_type = "positive_feedback" if feedback_request.thumbs_up else "negative_feedback"
-            
+            description = feedback_request.feedback_text[:200]
             feedback_preview = (
                 feedback_request.feedback_text[:50] + "..." 
                 if len(feedback_request.feedback_text) > 50 
                 else feedback_request.feedback_text
             )
-            logger.info(
-                "Learning: %s feedback for %s - '%s'",
-                pattern_type,
-                feedback_request.agent_name,
-                feedback_preview
-            )
-            
-            await feedback_repo.create_or_update_learning(
-                pattern_type=pattern_type,
-                description=feedback_request.feedback_text[:200],  # Truncate for storage
-                agent_name=updated_response.agent_name,
-                confidence_score=0.7 if feedback_request.thumbs_up else 0.3
-            )
+        else:
+            description = f"User gave {'positive' if feedback_request.thumbs_up else 'negative'} feedback"
+            feedback_preview = description
+        
+        logger.info(
+            "Learning: %s feedback for %s - '%s'",
+            pattern_type,
+            feedback_request.agent_name,
+            feedback_preview
+        )
+        
+        await feedback_repo.create_or_update_learning(
+            pattern_type=pattern_type,
+            description=description,
+            agent_name=updated_response.agent_name,
+            confidence_score=confidence_score
+        )
         
         return {
             "message": "Feedback submitted successfully",

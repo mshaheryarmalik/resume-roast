@@ -98,7 +98,6 @@ class AgentFeedbackRequest(BaseModel):
     feedback_text: Optional[str] = Field(
         None, 
         description="Optional text feedback",
-        min_length=1,
         max_length=500
     )
 
