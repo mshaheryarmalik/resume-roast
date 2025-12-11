@@ -147,6 +147,7 @@ async def stream_analysis(
     Stream agent analysis responses for a given session.
     Returns Server-Sent Events with agent responses.
     """
+    import main as main_module
     try:
         # Create repositories with shared session
         feedback_repo = FeedbackRepository(db)
@@ -161,13 +162,12 @@ async def stream_analysis(
         if not resume:
             raise HTTPException(status_code=404, detail="Resume not found")
         
-        # Get memory context
-        memory_learnings = await feedback_repo.get_aggregated_learnings(limit=10)
-        memory_context = [learning.description for learning in memory_learnings]
+        # Use global agent memory patterns refreshed periodically
+        memory_context = main_module.AGENT_MEMORY if hasattr(main_module, 'AGENT_MEMORY') else []
         
         # Log agent memory context - essential for system monitoring
         logger.info(
-            "Session %s: Using %d memory patterns", 
+            "Session %s: Using %d global memory patterns", 
             session_id, 
             len(memory_context)
         )
