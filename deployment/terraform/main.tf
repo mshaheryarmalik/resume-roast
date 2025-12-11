@@ -180,7 +180,7 @@ resource "aws_security_group" "rds" {
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.app.id]
+    security_groups = [aws_security_group.ecs_tasks.id]
   }
 
   tags = {
@@ -469,7 +469,7 @@ resource "aws_iam_role_policy" "ecs_task_policy" {
         ]
         Resource = [
           aws_secretsmanager_secret.db_credentials.arn,
-          aws_secretsmanager_secret.openai_key.arn
+          aws_secretsmanager_secret.azure_openai_api_key.arn
         ]
       },
       {

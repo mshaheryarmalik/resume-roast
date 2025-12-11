@@ -169,10 +169,10 @@ cd deployment/terraform
 terraform init
 
 # Review planned infrastructure
-terraform plan -var="openai_api_key=your-azure-openai-key-here"
+terraform plan -var="azure_openai_api_key=your-azure-openai-key-here"
 
 # Deploy infrastructure  
-terraform apply -var="openai_api_key=your-azure-openai-key-here"
+terraform apply -var="azure_openai_api_key=your-azure-openai-key-here"
 ```
 
 ### 2. Build and Deploy Application

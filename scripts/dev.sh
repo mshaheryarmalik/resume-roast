@@ -55,10 +55,10 @@ check_env() {
         fi
     fi
     
-    # Check if OpenAI API key is set
-    if grep -q "your_openai_api_key_here" .env; then
-        echo -e "${YELLOW}⚠️ Please set your OpenAI API key in .env file before starting services.${NC}"
-        echo -e "${YELLOW}Edit .env and replace 'your_openai_api_key_here' with your actual API key.${NC}"
+    # Check if Azure OpenAI API key is set
+    if grep -q "your_azure_openai_api_key_here" .env; then
+        echo -e "${YELLOW}⚠️ Please set your Azure OpenAI API key in .env file before starting services.${NC}"
+        echo -e "${YELLOW}Edit .env and replace 'your_azure_openai_api_key_here' with your actual API key.${NC}"
         exit 1
     fi
 }

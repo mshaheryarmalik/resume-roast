@@ -57,16 +57,16 @@ resource "aws_cloudwatch_log_group" "frontend" {
 }
 
 # Secrets for OpenAI API Key
-resource "aws_secretsmanager_secret" "openai_key" {
-  name                    = "resume-roast/openai-key"
-  description             = "OpenAI API key for Resume Roast"
+resource "aws_secretsmanager_secret" "azure_openai_api_key" {
+  name                    = "resume-roast/azure-openai-key"
+  description             = "Azure OpenAI API key for Resume Roast"
   kms_key_id             = aws_kms_key.resume_roast_key.arn
   recovery_window_in_days = 7
 }
 
-resource "aws_secretsmanager_secret_version" "openai_key" {
-  secret_id     = aws_secretsmanager_secret.openai_key.id
-  secret_string = var.openai_api_key
+resource "aws_secretsmanager_secret_version" "azure_openai_api_key" {
+  secret_id     = aws_secretsmanager_secret.azure_openai_api_key.id
+  secret_string = var.azure_openai_api_key
 }
 
 # ECS Task Definition - Backend
@@ -114,8 +114,16 @@ resource "aws_ecs_task_definition" "backend" {
           value = aws_kms_key.resume_roast_key.key_id
         },
         {
-          name  = "OPENAI_MODEL"
-          value = "gpt-4-turbo-2024-04-09"
+          name  = "AZURE_OPENAI_ENDPOINT"
+          value = var.azure_openai_endpoint
+        },
+        {
+          name  = "AZURE_OPENAI_API_VERSION"
+          value = var.azure_openai_api_version
+        },
+        {
+          name  = "AZURE_OPENAI_DEPLOYMENT"
+          value = var.azure_openai_deployment
         },
         {
           name  = "OPENAI_MAX_TOKENS"
@@ -157,8 +165,8 @@ resource "aws_ecs_task_definition" "backend" {
           valueFrom = aws_secretsmanager_secret.db_credentials.arn
         },
         {
-          name      = "OPENAI_API_KEY"
-          valueFrom = aws_secretsmanager_secret.openai_key.arn
+          name      = "azure_openai_api_key"
+          valueFrom = aws_secretsmanager_secret.azure_openai_api_key.arn
         }
       ]
 
@@ -286,5 +294,57 @@ resource "aws_ecs_service" "frontend" {
 
   tags = {
     Name = "resume-roast-frontend-service"
+  }
+}
+
+# Auto Scaling for Backend
+resource "aws_appautoscaling_target" "backend" {
+  max_capacity       = 4
+  min_capacity       = 1
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.backend.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "backend_cpu" {
+  name               = "backend-cpu-autoscaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.backend.resource_id
+  scalable_dimension = aws_appautoscaling_target.backend.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.backend.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+    target_value       = 70.0
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
+  }
+}
+
+# Auto Scaling for Frontend
+resource "aws_appautoscaling_target" "frontend" {
+  max_capacity       = 4
+  min_capacity       = 1
+  resource_id        = "service/${aws_ecs_cluster.main.name}/${aws_ecs_service.frontend.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "frontend_cpu" {
+  name               = "frontend-cpu-autoscaling"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.frontend.resource_id
+  scalable_dimension = aws_appautoscaling_target.frontend.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.frontend.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+    target_value       = 70.0
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 60
   }
 }
