@@ -93,7 +93,7 @@ class ResumeRoastUI:
                 )
                 
                 if response.status_code == 200:
-                    ui.notify('✅ Feedback submitted!', type='positive')
+                    ui.notify('Feedback submitted!', type='positive')
                 else:
                     ui.notify(f'❌ Error: {response.status_code}', type='negative')
         except Exception as e:
